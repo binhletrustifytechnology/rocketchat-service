@@ -6,10 +6,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -85,20 +88,22 @@ public class RocketChatMessageService {
     }
 
     private Flux<RocketChatMessage> getMessagesInternal(String roomId, int limit) {
+        URI uri = UriComponentsBuilder.fromHttpUrl(properties.getUrl())
+                .path("/channels.messages")
+                .queryParam("roomId", roomId)
+                .queryParam("count", limit)
+                .build()
+                .toUri();
         return webClientBuilder.build()
                 .get()
-                .uri(uriBuilder -> uriBuilder
-                        .path(properties.getUrl() + "/channels.messages")
-                        .queryParam("roomId", roomId)
-                        .queryParam("count", limit)
-                        .build())
+                .uri(uri)
                 .header("X-Auth-Token", properties.getAuthToken())
                 .header("X-User-Id", properties.getUserId())
                 .retrieve()
                 .bodyToMono(Map.class)
                 .flatMapMany(response -> {
                     if (response.containsKey("messages")) {
-                        log.debug("Retrieved {} messages", ((java.util.List) response.get("messages")).size());
+                        log.debug("Retrieved {} messages", ((List) response.get("messages")).size());
                         // In a real implementation, you would map the response to a list of RocketChatMessage objects
                         return Flux.<RocketChatMessage>empty();
                     } else {

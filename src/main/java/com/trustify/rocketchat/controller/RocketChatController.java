@@ -61,7 +61,7 @@ public class RocketChatController {
             @RequestParam(required = false) String[] members,
             @RequestParam(defaultValue = "false") boolean readOnly,
             @RequestParam(required = false) String description) {
-        
+
         return roomService.createChannel(name, members != null ? members : new String[0], readOnly, description);
     }
 
@@ -69,7 +69,7 @@ public class RocketChatController {
     public Flux<RocketChatMessage> getMessages(
             @PathVariable String roomId,
             @RequestParam(defaultValue = "50") int limit) {
-        
+
         return messageService.getMessages(roomId, limit);
     }
 
@@ -77,8 +77,24 @@ public class RocketChatController {
     public Mono<RocketChatMessage> sendMessage(
             @PathVariable String roomId,
             @RequestBody @Valid MessageRequest request) {
-        
+
         return messageService.sendMessage(roomId, request.getMessage());
+    }
+
+    @DeleteMapping("/channels/{roomId}")
+    public Mono<ResponseEntity<Map<String, String>>> deleteChannel(@PathVariable String roomId) {
+        return roomService.deleteChannel(roomId)
+                .map(success -> ResponseEntity.ok(Map.of(
+                        "status", "success",
+                        "message", "Channel deleted successfully"
+                )))
+                .onErrorResume(error -> {
+                    log.error("Failed to delete channel", error);
+                    return Mono.just(ResponseEntity.badRequest().body(Map.of(
+                            "status", "error",
+                            "message", "Failed to delete channel: " + error.getMessage()
+                    )));
+                });
     }
 
     // Request DTOs

@@ -135,9 +135,8 @@ public class RocketChatRoomService {
         return webClientBuilder.build()
                 .get()
                 .uri(uriBuilder -> uriBuilder
-                        .path(properties.getUrl() + "/channels.info")
                         .queryParam("roomId", roomId)
-                        .build())
+                        .build(properties.getUrl() + "/channels.info"))
                 .header("X-Auth-Token", properties.getAuthToken())
                 .header("X-User-Id", properties.getUserId())
                 .retrieve()
@@ -153,6 +152,47 @@ public class RocketChatRoomService {
                     }
                 })
                 .doOnError(error -> log.error("Error retrieving channel info", error));
+    }
+
+    /**
+     * Deletes a channel.
+     *
+     * @param roomId the ID of the room to delete
+     * @return Mono<Boolean> true if the channel was deleted successfully
+     */
+    public Mono<Boolean> deleteChannel(String roomId) {
+        log.debug("Deleting channel {}", roomId);
+
+        // Ensure we're authenticated
+        if (!authService.isAuthenticated()) {
+            return authService.login().flatMap(auth -> deleteChannelInternal(roomId));
+        }
+
+        return deleteChannelInternal(roomId);
+    }
+
+    private Mono<Boolean> deleteChannelInternal(String roomId) {
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("roomId", roomId);
+
+        return webClientBuilder.build()
+                .post()
+                .uri(properties.getUrl() + "/channels.delete")
+                .header("X-Auth-Token", properties.getAuthToken())
+                .header("X-User-Id", properties.getUserId())
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(Map.class)
+                .flatMap(response -> {
+                    if (response.containsKey("success") && (Boolean) response.get("success")) {
+                        log.debug("Channel deleted successfully");
+                        return Mono.just(true);
+                    } else {
+                        log.error("Failed to delete channel: {}", response);
+                        return Mono.error(new RuntimeException("Failed to delete channel"));
+                    }
+                })
+                .doOnError(error -> log.error("Error deleting channel", error));
     }
 
     /**

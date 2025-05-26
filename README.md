@@ -5,7 +5,7 @@ This project provides a Spring Boot service for integrating with Rocket.Chat. It
 ## Features
 
 - Authentication with Rocket.Chat API
-- Channel/Room operations (create, get info, list)
+- Channel/Room operations (create, get info, list, delete)
 - Message operations (send, retrieve)
 - RESTful API endpoints to interact with Rocket.Chat
 
@@ -67,6 +67,11 @@ rocketchat.api.password=your-password
 
     # Create a read-only channel with description
     curl -X POST "http://localhost:8080/api/rocketchat/channels?name=announcements&readOnly=true&description=Company%20announcements"
+    ```
+- `DELETE /api/rocketchat/channels/{roomId}` - Delete a channel
+  - Example curl command:
+    ```bash
+    curl -X DELETE "http://localhost:8080/api/rocketchat/channels/ByehQjC44FwMeiLbX"
     ```
 
 ### Messages
