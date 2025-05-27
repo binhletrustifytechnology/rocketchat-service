@@ -1,14 +1,17 @@
 package com.trustify.rocketchat.service;
 
 import com.trustify.rocketchat.config.RocketChatProperties;
+import com.trustify.rocketchat.model.RocketChatEndpoint;
 import com.trustify.rocketchat.model.RocketChatRoom;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -42,7 +45,7 @@ public class RocketChatRoomService {
     private Flux<RocketChatRoom> getPublicChannelsInternal() {
         return webClientBuilder.build()
                 .get()
-                .uri(properties.getUrl() + "/channels.list")
+                .uri(properties.getUrl() + RocketChatEndpoint.CHANNELS_LIST.getPath())
                 .header("X-Auth-Token", properties.getAuthToken())
                 .header("X-User-Id", properties.getUserId())
                 .retrieve()
@@ -95,7 +98,7 @@ public class RocketChatRoomService {
 
         return webClientBuilder.build()
                 .post()
-                .uri(properties.getUrl() + "/channels.create")
+                .uri(properties.getUrl() + RocketChatEndpoint.CHANNELS_CREATE.getPath())
                 .header("X-Auth-Token", properties.getAuthToken())
                 .header("X-User-Id", properties.getUserId())
                 .bodyValue(requestBody)
@@ -132,11 +135,19 @@ public class RocketChatRoomService {
     }
 
     private Mono<RocketChatRoom> getChannelInfoInternal(String roomId) {
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(properties.getUrl())
+                .path(RocketChatEndpoint.CHANNELS_INFO.getPath());
+
+        // Only include roomId parameter if it's not null
+        if (roomId != null) {
+            uriBuilder.queryParam("roomId", roomId);
+        }
+
+        URI uri = uriBuilder.build().toUri();
+
         return webClientBuilder.build()
                 .get()
-                .uri(uriBuilder -> uriBuilder
-                        .queryParam("roomId", roomId)
-                        .build(properties.getUrl() + "/channels.info"))
+                .uri(uri)
                 .header("X-Auth-Token", properties.getAuthToken())
                 .header("X-User-Id", properties.getUserId())
                 .retrieve()
@@ -177,7 +188,7 @@ public class RocketChatRoomService {
 
         return webClientBuilder.build()
                 .post()
-                .uri(properties.getUrl() + "/channels.delete")
+                .uri(properties.getUrl() + RocketChatEndpoint.CHANNELS_DELETE.getPath())
                 .header("X-Auth-Token", properties.getAuthToken())
                 .header("X-User-Id", properties.getUserId())
                 .bodyValue(requestBody)

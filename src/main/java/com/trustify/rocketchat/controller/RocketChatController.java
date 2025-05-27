@@ -97,6 +97,14 @@ public class RocketChatController {
                 });
     }
 
+    @GetMapping("/search")
+    public Flux<RocketChatMessage> searchMessages(
+            @RequestParam @NotBlank String searchText,
+            @RequestParam(required = false) String roomId) {
+
+        return messageService.searchMessages(searchText, roomId);
+    }
+
     // Request DTOs
     public static class MessageRequest {
         @NotBlank

@@ -1,6 +1,7 @@
 package com.trustify.rocketchat.service;
 
 import com.trustify.rocketchat.config.RocketChatProperties;
+import com.trustify.rocketchat.model.RocketChatEndpoint;
 import com.trustify.rocketchat.model.RocketChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +12,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +51,7 @@ public class RocketChatMessageService {
 
         return webClientBuilder.build()
                 .post()
-                .uri(properties.getUrl() + "/chat.postMessage")
+                .uri(properties.getUrl() + RocketChatEndpoint.CHAT_POST_MESSAGE.getPath())
                 .header("X-Auth-Token", properties.getAuthToken())
                 .header("X-User-Id", properties.getUserId())
                 .bodyValue(requestBody)
@@ -58,9 +60,26 @@ public class RocketChatMessageService {
                 .flatMap(response -> {
                     if (response.containsKey("message")) {
                         log.debug("Message sent successfully");
-                        // Convert the response to a RocketChatMessage
-                        // In a real implementation, you would map the response to the RocketChatMessage class
-                        return Mono.just(new RocketChatMessage());
+                        Map<String, Object> messageData = (Map<String, Object>) response.get("message");
+
+                        RocketChatMessage.User user = null;
+                        if (messageData.containsKey("u")) {
+                            Map<String, Object> userData = (Map<String, Object>) messageData.get("u");
+                            user = new RocketChatMessage.User(
+                                    (String) userData.get("_id"),
+                                    (String) userData.get("username"),
+                                    (String) userData.get("name")
+                            );
+                        }
+
+                        return Mono.just(RocketChatMessage.builder()
+                                .id((String) messageData.get("_id"))
+                                .roomId((String) messageData.get("rid"))
+                                .message((String) messageData.get("msg"))
+                                .timestamp(messageData.containsKey("ts") ? 
+                                        Instant.parse((String) messageData.get("ts")) : null)
+                                .user(user)
+                                .build());
                     } else {
                         log.error("Failed to send message: {}", response);
                         return Mono.error(new RuntimeException("Failed to send message"));
@@ -89,7 +108,7 @@ public class RocketChatMessageService {
 
     private Flux<RocketChatMessage> getMessagesInternal(String roomId, int limit) {
         URI uri = UriComponentsBuilder.fromHttpUrl(properties.getUrl())
-                .path("/channels.messages")
+                .path(RocketChatEndpoint.CHANNELS_MESSAGES.getPath())
                 .queryParam("roomId", roomId)
                 .queryParam("count", limit)
                 .build()
@@ -103,14 +122,108 @@ public class RocketChatMessageService {
                 .bodyToMono(Map.class)
                 .flatMapMany(response -> {
                     if (response.containsKey("messages")) {
-                        log.debug("Retrieved {} messages", ((List) response.get("messages")).size());
-                        // In a real implementation, you would map the response to a list of RocketChatMessage objects
-                        return Flux.<RocketChatMessage>empty();
+                        List<Map<String, Object>> messages = (List<Map<String, Object>>) response.get("messages");
+                        log.debug("Retrieved {} messages", messages.size());
+                        return Flux.fromIterable(messages)
+                                .map(messageData -> {
+                                    RocketChatMessage.User user = null;
+                                    if (messageData.containsKey("u")) {
+                                        Map<String, Object> userData = (Map<String, Object>) messageData.get("u");
+                                        user = new RocketChatMessage.User(
+                                                (String) userData.get("_id"),
+                                                (String) userData.get("username"),
+                                                (String) userData.get("name")
+                                        );
+                                    }
+
+                                    return RocketChatMessage.builder()
+                                            .id((String) messageData.get("_id"))
+                                            .roomId((String) messageData.get("rid"))
+                                            .message((String) messageData.get("msg"))
+                                            .timestamp(messageData.containsKey("ts") ? 
+                                                    Instant.parse((String) messageData.get("ts")) : null)
+                                            .user(user)
+                                            .build();
+                                });
                     } else {
                         log.error("Failed to retrieve messages: {}", response);
                         return Flux.error(new RuntimeException("Failed to retrieve messages"));
                     }
                 })
                 .doOnError(error -> log.error("Error retrieving messages", error));
+    }
+
+    /**
+     * Searches for messages containing the specified text.
+     *
+     * @param searchText the text to search for
+     * @param roomId the ID of the room to search in (optional, if null searches all rooms)
+     * @return Flux<RocketChatMessage> the messages matching the search criteria
+     */
+    public Flux<RocketChatMessage> searchMessages(String searchText, String roomId) {
+        if (roomId == null) {
+            log.debug("Searching for messages containing: {} in all rooms", searchText);
+        } else {
+            log.debug("Searching for messages containing: {} in room: {}", searchText, roomId);
+        }
+
+        // Ensure we're authenticated
+        if (!authService.isAuthenticated()) {
+            return authService.login().flatMapMany(auth -> searchMessagesInternal(searchText, roomId));
+        }
+
+        return searchMessagesInternal(searchText, roomId);
+    }
+
+    private Flux<RocketChatMessage> searchMessagesInternal(String searchText, String roomId) {
+        UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(properties.getUrl())
+                .path(RocketChatEndpoint.CHAT_SEARCH.getPath())
+                .queryParam("searchText", searchText);
+
+        // Only include roomId parameter if it's not null
+        if (roomId != null) {
+            uriBuilder.queryParam("roomId", roomId);
+        }
+
+        URI uri = uriBuilder.build().toUri();
+
+        return webClientBuilder.build()
+                .get()
+                .uri(uri)
+                .header("X-Auth-Token", properties.getAuthToken())
+                .header("X-User-Id", properties.getUserId())
+                .retrieve()
+                .bodyToMono(Map.class)
+                .flatMapMany(response -> {
+                    if (response.containsKey("messages")) {
+                        List<Map<String, Object>> messages = (List<Map<String, Object>>) response.get("messages");
+                        log.debug("Found {} messages matching search criteria", messages.size());
+                        return Flux.fromIterable(messages)
+                                .map(messageData -> {
+                                    RocketChatMessage.User user = null;
+                                    if (messageData.containsKey("u")) {
+                                        Map<String, Object> userData = (Map<String, Object>) messageData.get("u");
+                                        user = new RocketChatMessage.User(
+                                                (String) userData.get("_id"),
+                                                (String) userData.get("username"),
+                                                (String) userData.get("name")
+                                        );
+                                    }
+
+                                    return RocketChatMessage.builder()
+                                            .id((String) messageData.get("_id"))
+                                            .roomId((String) messageData.get("rid"))
+                                            .message((String) messageData.get("msg"))
+                                            .timestamp(messageData.containsKey("ts") ? 
+                                                    Instant.parse((String) messageData.get("ts")) : null)
+                                            .user(user)
+                                            .build();
+                                });
+                    } else {
+                        log.error("Failed to search messages: {}", response);
+                        return Flux.error(new RuntimeException("Failed to search messages"));
+                    }
+                })
+                .doOnError(error -> log.error("Error searching messages", error));
     }
 }
