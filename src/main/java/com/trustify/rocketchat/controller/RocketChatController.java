@@ -7,13 +7,16 @@ import com.trustify.rocketchat.service.RocketChatMessageService;
 import com.trustify.rocketchat.service.RocketChatRoomService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -73,12 +76,12 @@ public class RocketChatController {
         return messageService.getMessages(roomId, limit);
     }
 
-    @PostMapping("/channels/{roomId}/messages")
+    @PostMapping(value = "/channels/{roomId}/messages", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<RocketChatMessage> sendMessage(
             @PathVariable String roomId,
-            @RequestBody @Valid MessageRequest request) {
+            @ModelAttribute @Valid MessageRequest request) {
 
-        return messageService.sendMessage(roomId, request.getMessage());
+        return messageService.sendMessage(roomId, request.getMessage(), request.getFiles());
     }
 
     @DeleteMapping("/channels/{roomId}")
@@ -110,12 +113,22 @@ public class RocketChatController {
         @NotBlank
         private String message;
 
+        private List<MultipartFile> files;
+
         public String getMessage() {
             return message;
         }
 
         public void setMessage(String message) {
             this.message = message;
+        }
+
+        public List<MultipartFile> getFiles() {
+            return files;
+        }
+
+        public void setFiles(List<MultipartFile> files) {
+            this.files = files;
         }
     }
 }
