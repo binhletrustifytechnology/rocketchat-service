@@ -98,9 +98,6 @@ public class RocketChatMessageService {
         // Add message text
         bodyBuilder.part("msg", message);
 
-        // Add room ID
-        bodyBuilder.part("roomId", roomId);
-
         // Add the first file (Rocket.Chat API only supports one file per request)
         if (!files.isEmpty()) {
             MultipartFile file = files.get(0);
@@ -192,11 +189,11 @@ public class RocketChatMessageService {
                                 .type((String) attachmentData.get("type"))
                                 .description((String) attachmentData.get("description"))
                                 .titleLink((String) attachmentData.get("title_link"))
-                                .titleLinkDownload(attachmentData.containsKey("title_link_download") ? 
+                                .titleLinkDownload(attachmentData.containsKey("title_link_download") ?
                                         (Boolean) attachmentData.get("title_link_download") : false)
                                 .imageUrl((String) attachmentData.get("image_url"))
                                 .imageType((String) attachmentData.get("image_type"))
-                                .imageSize(attachmentData.containsKey("image_size") ? 
+                                .imageSize(attachmentData.containsKey("image_size") ?
                                         ((Number) attachmentData.get("image_size")).longValue() : null)
                                 .build())
                         .collect(Collectors.toList());
@@ -206,9 +203,47 @@ public class RocketChatMessageService {
                     .id((String) messageData.get("_id"))
                     .roomId((String) messageData.get("rid"))
                     .message((String) messageData.get("msg"))
-                    .timestamp(messageData.containsKey("ts") ? 
+                    .timestamp(messageData.containsKey("ts") ?
                             Instant.parse((String) messageData.get("ts")) : null)
                     .user(user)
+                    .attachments(attachments)
+                    .build());
+        } else {
+            log.error("Failed to upload file: {}", response);
+            return Mono.error(new RuntimeException("Failed to upload file"));
+        }
+    }
+
+    private Mono<RocketChatMessage> processMediaResponse(Map<String, Object> response) {
+        if (response.containsKey("success") && (Boolean) response.get("success")) {
+            log.debug("File uploaded successfully");
+
+            // Extract the file data from the response
+            Map<String, Object> fileData = null;
+            if (response.containsKey("file")) {
+                fileData = (Map<String, Object>) response.get("file");
+            }
+
+            if (fileData == null) {
+                log.error("No file data in upload response: {}", response);
+                return Mono.error(new RuntimeException("Failed to process upload response"));
+            }
+
+            String fileId = (String) fileData.get("_id");
+            String fileUrl = (String) fileData.get("url");
+
+            // Create an attachment from the file data
+            RocketChatMessage.Attachment attachment = RocketChatMessage.Attachment.builder()
+                    .title(fileId)
+                    .titleLink(fileUrl)
+                    .titleLinkDownload(true)
+                    .build();
+
+            List<RocketChatMessage.Attachment> attachments = List.of(attachment);
+
+            // Create a message with the file attachment
+            return Mono.just(RocketChatMessage.builder()
+                    .id(fileId)
                     .attachments(attachments)
                     .build());
         } else {

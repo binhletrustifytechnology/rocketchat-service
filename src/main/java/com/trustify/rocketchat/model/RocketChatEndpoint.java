@@ -13,7 +13,8 @@ public enum RocketChatEndpoint {
     CHANNELS_MESSAGES("/channels.messages"),
     CHAT_SEARCH("/chat.search"),
     CHAT_POST_MESSAGE("/chat.postMessage"),
-    ROOMS_UPLOAD("/rooms.media");
+    ROOMS_UPLOAD("/rooms.upload"),
+    ROOMS_MEDIA("/rooms.media");
 
     private final String path;
 
